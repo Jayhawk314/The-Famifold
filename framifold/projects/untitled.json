@@ -1,0 +1,28 @@
+{
+  "meta": {
+    "title": "",
+    "logline": "",
+    "theme": "",
+    "mood": "",
+    "audience": "",
+    "target_length_s": 180,
+    "voices": "",
+    "look": "",
+    "rules": "",
+    "notes": "",
+    "strictness": "Balanced"
+  },
+  "segments": [
+    {
+      "name": "Cold open",
+      "duration_s": 30.0,
+      "story": "",
+      "mood": "",
+      "narration": "",
+      "voice": "",
+      "notes": ""
+    }
+  ],
+  "clips": [],
+  "next_id": 1
+}
