@@ -32,6 +32,19 @@ LANES = ["Visual", "Overlay / text", "Voice", "SFX", "Music"]
 LANE_COLOURS = {"Visual": "#4C78A8", "Overlay / text": "#B279A2", "Voice": "#F58518",
                 "SFX": "#54A24B", "Music": "#E45756"}
 SEG_COLS = ["name", "duration_s", "story", "mood", "narration", "voice", "notes"]
+STRICT_RULES = {
+    "Strict": ["- Filled fields are exact instructions: follow them as written. Change nothing, even to improve it.",
+               "- BLANK fields: do not invent. Ask James what goes there before making anything for it.",
+               "- If something in the plan cannot be done as written, stop and say so. Do not substitute."],
+    "Balanced": ["- Filled fields are decisions: follow them.",
+                 "- BLANK fields: propose something that fits the rest of the plan, mark it as a proposal, "
+                 "and ask James before treating it as decided."],
+    "Loosey-goosey": ["- Everything here is an idea, not an instruction. Improvise, add, cut or reorder if it makes a better video.",
+                      "- BLANK fields: your choice.",
+                      "- At the end, list every change from the plan and why, so James can see what moved."],
+}
+BLANK_TAG = {"Strict": "BLANK (ask James)", "Balanced": "BLANK (agent proposes, James approves)",
+             "Loosey-goosey": "BLANK (agent's choice)"}
 
 st.set_page_config(page_title="Framifold", layout="wide")
 
@@ -47,6 +60,7 @@ def blank_project():
 
 def set_project(p):
     st.session_state.project = p
+    st.session_state.pop("strictness_w", None)  # let the radio pick up the loaded project's setting
     st.session_state.editor_rev = st.session_state.get("editor_rev", 0) + 1
     st.session_state.seg_base = pd.DataFrame(p["segments"], columns=SEG_COLS)
 
@@ -121,6 +135,10 @@ with st.sidebar:
     m["look"] = st.text_area("Look (style, colour, Blender / stills / footage)", m["look"], height=70)
     m["rules"] = st.text_area("Rules for the agent (must / must not)", m["rules"], height=70)
     m["notes"] = st.text_area("Other notes", m["notes"], height=70)
+    m["strictness"] = st.radio("How strictly the agent follows this plan", list(STRICT_RULES),
+                               index=list(STRICT_RULES).index(m.get("strictness", "Balanced")), key="strictness_w",
+                               help="Strict: exactly as written, ask about blanks. Balanced: follow it, propose blanks. "
+                                    "Loosey-goosey: ideas only, improvise, list the changes.")
 
     fname = re.sub(r"[^A-Za-z0-9_-]+", "_", m["title"].strip()) or "untitled"
     if st.button(f"Save as projects/{fname}.json", type="primary", width="stretch"):
@@ -321,11 +339,11 @@ with tab_assets:
 
 def brief():
     m, L = P["meta"], []
-    blank = lambda v: v if str(v).strip() else "BLANK (agent proposes, James approves)"
+    mode = m.get("strictness", "Balanced")
+    blank = lambda v: v if str(v).strip() else BLANK_TAG[mode]
     L += [f"# Agent brief: {m['title'] or 'untitled'}", "",
-          "Built from the Framifold rubric. Make the video this describes.",
-          "- Filled fields are decisions: follow them.",
-          "- BLANK fields: propose something, mark it as a proposal, and ask James before treating it as decided.",
+          f"Built from the Framifold rubric. Make the video this describes. **Strictness: {mode}.**",
+          *STRICT_RULES[mode],
           "- REQUEST clips: find (Freesound CC0, Wikimedia Commons; log source and licence) or make (Blender, cards) what is described.",
           "- Ask James before any ElevenLabs spend, upload, publish or push.",
           "- Report what was done, what was not done, and anything that looks wrong. Never hide a problem.", "",
