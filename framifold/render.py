@@ -9,6 +9,8 @@ same for every video: replace requests with real files in the plan, and render a
 
 Writes <out>.mp4 and <out>.report.md (what was placed, what stood in, what was cut or wrong).
 Pictures: level 0-1 = opacity (see-through over lower layers), 1-1.5 = brighter. Sounds: level = volume.
+A still on Full screen may carry "motion": "push in" or "pull out" (a slow 12% move across the clip), and any
+filled picture "focus": "top" or "bottom" to choose which part survives the crop (default centre).
 A video clip on a picture lane is used for its picture only; put its sound on a sound lane to hear it.
 """
 import json, re, subprocess, sys, tempfile, textwrap
@@ -73,7 +75,8 @@ def placement(c, W, H):
     """Scale filter and overlay position for the clip's placement."""
     p = c.get("placement", "Full screen")
     fit = lambda w, h: f"scale=w={w}:h={h}:force_original_aspect_ratio=decrease"
-    fill = lambda w, h: f"scale=w={w}:h={h}:force_original_aspect_ratio=increase,crop={w}:{h}"
+    ycrop = {"top": "0", "bottom": "ih-oh"}.get(c.get("focus", "center"), "(ih-oh)/2")
+    fill = lambda w, h: f"scale=w={w}:h={h}:force_original_aspect_ratio=increase,crop={w}:{h}:(iw-ow)/2:{ycrop}"
     pw, ph = int(W * 0.35) // 2 * 2, int(H * 0.35) // 2 * 2
     return {
         "Picture-in-picture, top right": (fit(pw, ph), f"W-w-{PAD}", f"{PAD}"),
@@ -123,15 +126,25 @@ def render(plan_path, out=None, W=1280, H=720, fps=24):
             is_image = src.suffix.lower() in IMAGE
             report["placed"].append(f"#{c['id']} {c['lane']} layer {c['layer']} {start:g}-{end:g}s: {src.name}")
         n = inputs.count("-i")  # index of the input about to be added
-        if is_image:
+        motion = c.get("motion", "none") if is_image and c.get("placement", "Full screen") == "Full screen" else "none"
+        scale, x, y = placement(c, W, H)
+        if motion in ("push in", "pull out"):
+            # a slow move on a still: zoompan makes every frame from the one image (scaled up first, so it is smooth)
+            frames_n = max(1, int(round(length * fps)))
+            z = f"1+0.12*on/{frames_n}" if motion == "push in" else f"1.12-0.12*on/{frames_n}"
+            inputs += ["-i", str(src)]
+            f = [scale, f"scale={W * 2}:{H * 2}",
+                 f"zoompan=z='{z}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frames_n}:s={W}x{H}:fps={fps}",
+                 "format=rgba"]
+        elif is_image:
             inputs += ["-loop", "1", "-framerate", str(fps), "-t", f"{length:.3f}", "-i", str(src)]
+            f = [scale, f"fps={fps}", "format=rgba"]
         else:
             if c.get("loop"):
                 inputs += ["-stream_loop", "-1"]
             inputs += ["-ss", f"{c.get('trim_in', 0) or 0:.3f}", "-t", f"{length:.3f}", "-i", str(src)]
-        scale, x, y = placement(c, W, H)
+            f = [scale, f"fps={fps}", "format=rgba"]
         level = float(c.get("level", 1.0))
-        f = [scale, f"fps={fps}", "format=rgba"]
         if level > 1.0:
             f.append(f"eq=brightness={min((level - 1.0) * 0.4, 0.3):.3f}")
         if level < 1.0:
